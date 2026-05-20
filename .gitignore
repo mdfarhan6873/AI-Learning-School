@@ -1,0 +1,84 @@
+# Dependencies
+**/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build outputs
+**/dist
+**/.next
+**/build
+**/out
+
+# Coverage
+**/coverage
+**/.nyc_output
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Runtime
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Temp
+.temp
+.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea
+.project
+.classpath
+.settings
+.c9
+*.launch
+*.sublime-workspace
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets / keys
+*.pem
+
+# Diagnostic reports
+report.*.json
+# AGENT CONFIGS (to prevent LLMs from rewriting your entire repo)
+AGENTS.md
+CLAUDE.md
+
+# Next.js build output
+.next/
+
+# Node modules
+node_modules/
