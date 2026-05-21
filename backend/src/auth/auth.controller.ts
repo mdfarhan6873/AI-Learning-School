@@ -1,12 +1,16 @@
 import { Controller, Post, Body, Ip, Headers, HttpCode, HttpStatus, UseGuards, Get, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SendOtpDto, VerifyOtpDto, RefreshTokenDto, GoogleAuthDto } from './dto/auth.dto';
+import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly usersService: UsersService,
+    ) {}
 
     @Post('send-otp')
     @HttpCode(HttpStatus.OK)
@@ -53,6 +57,8 @@ export class AuthController {
     @UseGuards(JwtAuthGuard)
     @Get('me')
     getProfile(@Req() req: Request) {
-        return req.user;
+        // req.user is populated by JwtAuthGuard with the JWT payload containing 'sub' (user id)
+        const userId = (req.user as any).sub;
+        return this.usersService.findById(userId);
     }
 }

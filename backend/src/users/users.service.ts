@@ -27,14 +27,24 @@ export class UsersService {
         return this.userRepository.findOne({ where: { email } });
     }
 
-    async createStudentUser(identifier: string, isEmail: boolean = false): Promise<User> {
+    async findById(id: string): Promise<User | null> {
+        return this.userRepository.findOne({ where: { id } });
+    }
+
+    async createStudentUser(
+        identifier: string,
+        isEmail: boolean = false,
+        options?: { full_name?: string; provider?: string; provider_user_id?: string }
+    ): Promise<User> {
         // Create base user
         const user = this.userRepository.create({
             mobile: !isEmail ? identifier : null,
             email: isEmail ? identifier : null,
+            full_name: options?.full_name || null,
             mobile_verified: !isEmail,
             email_verified: isEmail,
-            auth_provider: isEmail ? 'email_otp' : 'phone_otp',
+            auth_provider: (options?.provider || (isEmail ? 'email_otp' : 'phone_otp')) as any,
+            provider_user_id: options?.provider_user_id || null,
             is_active: true,
             is_profile_completed: false,
         });

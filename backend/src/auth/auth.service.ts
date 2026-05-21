@@ -48,7 +48,7 @@ export class AuthService {
         }
 
         const cooldownKey = `otp:cooldown:${identifier}`;
-        const attemptsKey = `otp:attempts:${identifier}`;
+        const attemptsKey = `otp:verify_attempts:${identifier}`;
         const otpKey = `otp:${identifier}`;
 
         const cooldownExists = await this.redisService.client.get(cooldownKey);
@@ -68,13 +68,6 @@ export class AuthService {
 
         await this.redisService.client.set(otpKey, hashedOtp, { ex: OTP_EXPIRY_SECONDS });
         await this.redisService.client.set(cooldownKey, '1', { ex: OTP_COOLDOWN_SECONDS });
-        
-        // Optionally increment attempt lock logic here if needed
-        await this.redisService.client.incr(attemptsKey);
-        if (attemptCount === 0) {
-             await this.redisService.client.expire(attemptsKey, OTP_ATTEMPT_LOCK_SECONDS);
-        }
-
         // ====================================================================
         // 🚀 INTEGRATE REAL OTP PROVIDER HERE
         // ====================================================================
@@ -117,12 +110,22 @@ export class AuthService {
             identifier = email.toLowerCase();
         }
 
+        const attemptsKey = `otp:verify_attempts:${identifier}`;
         const redisKey = `otp:${identifier}`;
+        
+        const attemptCount = Number(await this.redisService.client.get(attemptsKey)) || 0;
+        if (attemptCount >= OTP_MAX_ATTEMPTS) {
+            throw new HttpException('Too many OTP verification attempts. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
+        }
 
         // Retrieve OTP from Redis
         const storedHashedOtp = await this.redisService.client.get<string>(redisKey);
 
         if (!storedHashedOtp || storedHashedOtp !== hashOtp(otp)) {
+            await this.redisService.client.incr(attemptsKey);
+            if (attemptCount === 0) {
+                 await this.redisService.client.expire(attemptsKey, OTP_ATTEMPT_LOCK_SECONDS);
+            }
             throw new BadRequestException('Invalid or expired OTP');
         }
 
@@ -131,7 +134,7 @@ export class AuthService {
         
         // Also clear attempts and cooldown if any
         await this.redisService.client.del(`otp:cooldown:${identifier}`);
-        await this.redisService.client.del(`otp:attempts:${identifier}`);
+        await this.redisService.client.del(attemptsKey);
 
         // Check if user exists
         let user = mobile ? await this.usersService.findByMobile(identifier) : await this.usersService.findByEmail(identifier);
@@ -176,17 +179,12 @@ export class AuthService {
             let user = await this.userRepository.findOne({ where: { email } });
 
             if (!user) {
-                // Register new user from Google
-                user = this.userRepository.create({
-                    email,
+                // Register new user from Google using onboarding flow to ensure roles and profile
+                user = await this.usersService.createStudentUser(email, true, {
                     full_name: name,
-                    email_verified: true,
-                    auth_provider: 'google',
-                    provider_user_id,
-                    is_active: true,
-                    is_profile_completed: false,
+                    provider: 'google',
+                    provider_user_id: provider_user_id,
                 });
-                await this.userRepository.save(user);
             } else {
                 if (!user.is_active) {
                     throw new UnauthorizedException('User account is disabled');
@@ -217,7 +215,7 @@ export class AuthService {
         try {
             // Verify refresh token signature and expiration
             const payload = this.jwtService.verify(refresh_token, {
-                secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+                secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
             });
 
             const user_id = payload.sub;
@@ -263,7 +261,7 @@ export class AuthService {
 
         try {
             const payload = this.jwtService.verify(refresh_token, {
-                secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+                secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
                 ignoreExpiration: true, // Allow logging out even if slightly expired
             });
 
@@ -291,13 +289,13 @@ export class AuthService {
         const payload = { sub: user.id, email: user.email, mobile: user.mobile, provider: user.auth_provider };
 
         const accessToken = this.jwtService.sign(payload, {
-            secret: this.configService.get<string>('JWT_ACCESS_SECRET') || 'access_secret',
-            expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '15m') as any,
+            secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+            expiresIn: (this.configService.getOrThrow<string>('JWT_ACCESS_EXPIRES')) as any,
         });
 
         const refreshToken = this.jwtService.sign(payload, {
-            secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refresh_secret',
-            expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d') as any,
+            secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+            expiresIn: (this.configService.getOrThrow<string>('JWT_REFRESH_EXPIRES')) as any,
         });
 
         // Hash the refresh token before saving to database
