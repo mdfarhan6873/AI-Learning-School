@@ -1,37 +1,165 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# AI School Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This is the backend service for the AI Learning School platform, built with [NestJS](https://nestjs.com/). It provides a robust, production-ready REST API featuring OTP-based authentication, Google OAuth integration, role-based access, and a highly secure architecture.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Table of Contents
+- [Tech Stack](#tech-stack)
+- [Security Features](#security-features)
+- [Authentication Flow](#authentication-flow)
+- [API Endpoints](#api-endpoints)
+- [How to Set Up a Real OTP Provider](#how-to-set-up-a-real-otp-provider)
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Tech Stack
+- **Framework**: NestJS (TypeScript)
+- **Database**: PostgreSQL with TypeORM
+- **Caching & Rate Limiting**: Redis
+- **Authentication**: JWT (Access & Refresh tokens), bcrypt hashing
+- **External Auth**: Google Auth Library
 
-## Project setup
+---
 
-```bash
-$ npm install
+## Security Features
+This backend is hardened for production:
+- **Helmet**: Protects against common web vulnerabilities (XSS, clickjacking).
+- **Strict CORS**: Prevents unauthorized frontend domains from calling the API.
+- **Global Rate Limiting**: Throttler limits requests to 100 per minute per IP to prevent DDoS and OTP spam.
+- **Global Exception Filter**: Intercepts unhandled errors, ensuring database structures and stack traces never leak to the client.
+
+---
+
+## Authentication Flow
+The application uses a secure OTP (One-Time Password) model alongside Google OAuth. 
+
+1. **OTP Sending**: A user provides a mobile number or email. The system normalizes the input, checks Redis for cooldowns and max-attempts, generates a 6-digit OTP, hashes it, and stores the hash in Redis.
+2. **OTP Verification**: The user submits the OTP. The system hashes the input, verifies it against Redis, and automatically creates a `User` and `UserProfile` if they don't exist.
+3. **Session Management**: Upon successful login, the user receives an `access_token` (short-lived) and a `refresh_token` (long-lived). The refresh token is hashed and persisted in the `auth_sessions` table.
+4. **Single Device Enforcement**: Generating a new session automatically revokes older active sessions for that user.
+
+---
+
+## API Endpoints
+
+### Auth API (`/api/auth`)
+
+| Method | Endpoint | Description | Payload / Body |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/send-otp` | Sends a 6-digit OTP to mobile/email. | `{ "mobile": "+919000000000" }` or `{ "email": "user@example.com" }` |
+| `POST` | `/api/auth/verify-otp` | Verifies OTP and logs the user in. | `{ "mobile": "+919000000000", "otp": "123456" }` |
+| `POST` | `/api/auth/google` | Logs a user in via Google OAuth Token. | `{ "token": "google_id_token_here" }` |
+| `POST` | `/api/auth/refresh` | Generates a new access token using a refresh token. | `{ "refresh_token": "..." }` |
+| `POST` | `/api/auth/logout` | Revokes the current session. | `{ "refresh_token": "..." }` |
+| `GET`  | `/api/auth/me` | Retrieves the currently logged-in user profile. | **Header**: `Authorization: Bearer <access_token>` |
+
+---
+
+## How to Set Up a Real OTP Provider
+
+Right now, the system generates OTPs but simply logs them to the console (`[MOCK OTP PROVIDER]`). When you are ready to send real SMS messages or Emails, follow these steps:
+
+**Step 1: Locate the code**
+Open `src/auth/auth.service.ts` and navigate to the `sendOtp` method (around line 75).
+
+**Step 2: Replace the Mock Logic**
+Find the block that looks like this:
+```typescript
+// ====================================================================
+// 🚀 INTEGRATE REAL OTP PROVIDER HERE
+// ====================================================================
+// Replace the console.log below with your actual SMS/Email API call.
 ```
 
-## Compile and run the project
+**Step 3: Implement your Provider**
+If you are using **Twilio or MSG91** for SMS, drop your API call inside the `if (mobile)` block:
+```typescript
+if (mobile) {
+    await twilioClient.messages.create({
+        body: `Your AI School login OTP is ${otp}. It expires in 5 minutes.`,
+        to: identifier // The normalized phone number
+    });
+}
+```
+
+If you are using **SendGrid or Nodemailer** for Email, drop your API call inside the `if (email)` block:
+```typescript
+if (email) {
+    await emailService.send({
+        to: identifier,
+        subject: 'Your AI School Login OTP',
+        text: `Your login OTP is ${otp}. It expires in 5 minutes.`
+    });
+}
+```
+
+The system is already handling all rate-limiting, normalization, and secure hashing for you—you only need to plug in the delivery mechanism!
+
+---
+
+## Environment Setup & Connecting the Frontend
+
+To connect your frontend application (e.g., React, Next.js, Vue) to this backend, you need to properly configure your environment variables.
+
+### 1. `.env` File Configuration
+Create a `.env` file in the root of your `backend` directory (if you haven't already). This file stores all your secrets and configuration variables. 
+
+```env
+# Server Port
+PORT=4000
+
+# CORS Configuration (Very Important for Frontend Connection!)
+# In development: Allow localhost (e.g., React on 3000, Vite on 5173)
+# In production: Allow your actual live domain
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Database (PostgreSQL)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+DB_DATABASE=sium_learning_school
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# JWT Secrets & Expiry
+JWT_ACCESS_SECRET=your_super_secret_access_key
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_SECRET=your_super_secret_refresh_key
+JWT_REFRESH_EXPIRES=7d
+
+# Google OAuth (If using Google Login)
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+```
+
+### 2. How CORS Connects to your Frontend
+The backend uses the `ALLOWED_ORIGINS` environment variable to configure **CORS (Cross-Origin Resource Sharing)**. 
+
+- **Development**: If your frontend runs on `http://localhost:3000`, ensure that URL is in `ALLOWED_ORIGINS`. This tells the browser, *"Yes, it is safe for the frontend on port 3000 to talk to the backend on port 4000."*
+- **Production**: When you deploy your backend to a server (like Render, AWS, or DigitalOcean), change `ALLOWED_ORIGINS` to your real frontend domain:
+  ```env
+  ALLOWED_ORIGINS=https://www.your-school-app.com
+  ```
+
+### 3. Making API Calls from the Frontend
+Once configured, your frontend can make requests to the backend. Example using `fetch` or `axios`:
+
+```javascript
+// Example: Sending OTP from frontend
+const response = await fetch('http://localhost:4000/api/auth/send-otp', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ mobile: '+919234666761' }),
+});
+const data = await response.json();
+```
+
+---
+
+## Running the app
 
 ```bash
 # development
@@ -43,56 +171,3 @@ $ npm run start:dev
 # production mode
 $ npm run start:prod
 ```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
