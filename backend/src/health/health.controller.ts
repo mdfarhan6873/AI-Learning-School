@@ -3,6 +3,8 @@ import {
     Get,
     ForbiddenException,
 } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 import { RedisService } from '../common/redis/redis.service';
 
@@ -10,6 +12,7 @@ import { RedisService } from '../common/redis/redis.service';
 export class HealthController {
     constructor(
         private readonly redisService: RedisService,
+        @InjectDataSource() private readonly dataSource: DataSource,
     ) { }
 
     private ensureDevAccess() {
@@ -53,10 +56,19 @@ export class HealthController {
     async postgresHealth() {
         this.ensureDevAccess();
 
-        return {
-            service: 'postgres',
-            status: 'not implemented yet',
-        };
+        try {
+            await this.dataSource.query('SELECT 1');
+            return {
+                service: 'postgres',
+                status: 'healthy',
+            };
+        } catch (error) {
+            return {
+                service: 'postgres',
+                status: 'unhealthy',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+        }
     }
 
     //No architecture change needed later just extend this controller

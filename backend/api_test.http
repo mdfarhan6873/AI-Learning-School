@@ -1,0 +1,11 @@
+GET http://localhost:4000/api/health/postgres
+
+###
+GET http://localhost:4000/api/health/redis
+
+###
+GET http://localhost:4000/api/health/system
+
+###
+GET http://localhost:4000/api
+
